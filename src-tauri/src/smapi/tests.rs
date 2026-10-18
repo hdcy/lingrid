@@ -292,6 +292,13 @@ fn a_failed_install_rolls_back_completely() {
             "{leftover} should be rolled back"
         );
     }
+    assert!(
+        fs::read_dir(&game).unwrap().flatten().all(|entry| !entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".lingrid-install-")),
+        "the scratch backup directory is removed"
+    );
 }
 
 #[test]
@@ -473,10 +480,18 @@ fn install_records_survive_round_trips_and_damage() {
         ["steam_appid.txt".to_owned()]
     );
 
-    // A damaged file degrades to "unknown version" instead of failing.
+    // A damaged file degrades to "unknown version" instead of failing, but is kept aside
+    // rather than silently overwritten: it may still list paths an uninstall must remove.
     fs::write(&record, "{not json").unwrap();
     assert_eq!(records::version_of(&record, &game), None);
     assert!(records::created_of(&record, &game).is_empty());
+    assert!(
+        fs::read_dir(record.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .any(|entry| entry.file_name().to_string_lossy().contains("corrupt-")),
+        "the damaged record is preserved"
+    );
 
     records::remember(&record, &game, "4.5.2", Vec::new()).unwrap();
     records::forget(&record, &game).unwrap();
@@ -651,12 +666,61 @@ fn verify_checks_digests_without_network_access() {
         release::verify(&archive, Some("00")).unwrap_err().code,
         "smapiChecksumMismatch"
     );
-    // Releases without a published digest are accepted as-is.
-    release::verify(&archive, None).unwrap();
+    // A release without a published digest is refused: the installer runs as code in the
+    // game directory, so an unverifiable download must not be copied there.
+    assert_eq!(
+        release::verify(&archive, None).unwrap_err().code,
+        "smapiDigestMissing"
+    );
     assert_eq!(
         release::verify(&temp.path().join("missing"), Some("00"))
             .unwrap_err()
             .code,
         "smapiArchiveUnreadable"
+    );
+}
+
+#[test]
+fn cache_paths_use_only_the_asset_file_name() {
+    // The asset name comes from the API response; a name carrying separators must not be
+    // able to place the cached installer outside the cache directory.
+    let release = super::model::SmapiRelease {
+        version: "4.5.2".to_owned(),
+        asset_name: "../../escape.zip".to_owned(),
+        asset_url: "https://example/installer".to_owned(),
+        sha256: None,
+        size: 1,
+    };
+    assert_eq!(
+        release::cached_path(Path::new("/cache"), &release),
+        PathBuf::from("/cache/escape.zip")
+    );
+
+    let nameless = super::model::SmapiRelease {
+        asset_name: String::new(),
+        ..release
+    };
+    assert_eq!(
+        release::cached_path(Path::new("/cache"), &nameless),
+        PathBuf::from("/cache/smapi-installer.zip")
+    );
+}
+
+#[test]
+fn a_successful_install_leaves_no_scratch_directory() {
+    let temp = TempDir::new().unwrap();
+    let game = temp.path().join("game");
+    let bundle_dir = temp.path().join("bundle");
+    game_dir(&game, GameRuntime::Linux);
+    bundle(&bundle_dir, GameRuntime::Linux);
+
+    install::install(&game, &bundle_dir, GameRuntime::Linux, "4.5.2").unwrap();
+
+    assert!(
+        fs::read_dir(&game).unwrap().flatten().all(|entry| !entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".lingrid-install-")),
+        "the scratch backup directory is removed after a successful install"
     );
 }

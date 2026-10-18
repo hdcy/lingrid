@@ -37,6 +37,8 @@ src/features/nexus/   Nexus 浏览页面、nxm 安装入口，API key 设置
 - **一个包可以包含多个 Mod**，会全部安装。
 - 文件夹名取包内的目录名；如果 Mod 直接位于包根，则用压缩包文件名。名字会清洗非法字符，并去掉前导点——否则装进去就是禁用状态。
 - 目标文件夹已存在时报错（`modFolderTaken`）而不是覆盖，避免悄悄丢掉用户对旧版本所做的修改。
+- 安装前先校验每个 `manifest.json`：`Name`、`Author`、`Version`、`UniqueID` 缺一不可（字段名大小写不敏感，`Version` 可以是字符串或对象），否则报 `modManifestInvalid`。SMAPI 会拒绝加载清单损坏的 Mod，提前拦住比装完再报错更好。
+- 同一个 `UniqueID` 已在 `Mods` 中存在（不论启用与否），或同一个包里出现两次时，报 `modDuplicate` —— SMAPI 遇到重复 ID 会直接跳过重复的那个，用户很难看出原因。目录名相同仍优先报 `modFolderTaken`，因为「删掉旧版本」是更直接的解法。
 - 解压会拒绝绝对路径、`..` 穿越与符号链接条目。
 
 ## Nexus 集成
@@ -82,6 +84,8 @@ Nexus 的限制是服务端强制的：**非 Premium 账号不能直接调用下
 2. 把该链接粘贴进「从链接安装」（面板里给的就是这个入口）；
 3. 应用解析链接（游戏域必须是 `stardewvalley`，否则拒绝），用保存的 API key 调 `…/files/<id>/download_link.json` 换取临时下载地址；
 4. 下载到临时文件后用与本地安装相同的流程装进 `Mods`。
+
+下载有三道约束：只接受 `https` 且最终主机属于 `*.nexusmods.com` / `*.nexus-cdn.com`（防止 `download_link.json` 被伪造或跳转到别处）、总量不超过 4 GiB、写盘前校验 zip 文件头。任一不满足都会中止，临时文件被删除。
 
 API key 在设置页填入，保存在应用数据目录的 `nexus/credentials.json`（Unix 下 0600 权限），**不会回传给界面**——界面只询问「是否已保存」。
 

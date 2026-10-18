@@ -123,14 +123,11 @@ pub fn install(
     for name in &bundled_mods {
         targets.insert(game_dir.join(MODS).join(name));
     }
-    if unix {
-        targets.insert(game_dir.join(LAUNCHER));
-        targets.insert(game_dir.join(LAUNCHER_BACKUP));
-    }
+    // The launcher pair is replaced and restored by `replace_launcher`/`restore_launcher`,
+    // so it is deliberately not part of the generic backup.
     let targets: Vec<PathBuf> = targets.into_iter().collect();
     // The Mods folder holds user mods: track only whether it existed, never its contents.
     let mods_existed = game_dir.join(MODS).is_dir();
-    // The launcher pair is handled by the backup/restore flow, so it is not "created".
     let created: Vec<String> = targets
         .iter()
         .filter(|path| !path.exists())
@@ -139,34 +136,59 @@ pub fn install(
         .map(|relative| relative.to_string_lossy().into_owned())
         .collect();
 
-    let backup = Backup::create(&targets)?;
-    match apply(
+    // Whether SMAPI was already installed: in that case the launcher already points at
+    // SMAPI and a rollback must keep it that way instead of restoring the game launcher.
+    let launcher_backup_existed = unix && game_dir.join(LAUNCHER_BACKUP).is_file();
+    let backup = Backup::create(&game_dir, &targets)?;
+    let mut launcher_touched = false;
+    let result = apply(
         &game_dir,
         bundle_dir,
         &entries,
         &bundled_mods,
         unix,
         user_config,
-    ) {
-        Ok(launcher_replaced) => {
+        &mut launcher_touched,
+    );
+    match result {
+        Ok(()) => {
             backup.discard();
             Ok(InstallReport {
                 outcome: SmapiInstallOutcome {
                     version: version.to_owned(),
                     executable: game_dir.join(executable_name(runtime)),
-                    launcher_replaced,
+                    launcher_replaced: unix,
                 },
                 created,
             })
         }
         Err(error) => {
-            backup.restore()?;
-            if !mods_existed {
-                let _ = fs::remove_dir(game_dir.join(MODS));
+            // Put the launcher back first: the backup below never contains it.
+            if launcher_touched {
+                let _ = rollback_launcher(&game_dir, launcher_backup_existed);
             }
-            Err(error)
+            match backup.rollback() {
+                Ok(()) => {
+                    if !mods_existed {
+                        let _ = fs::remove_dir(game_dir.join(MODS));
+                    }
+                    Err(error)
+                }
+                Err(rollback) => Err(AppError::with_detail(
+                    error.code,
+                    format!(
+                        "{} (rollback incomplete: {})",
+                        detail_of(&error),
+                        detail_of(&rollback)
+                    ),
+                )),
+            }
         }
     }
+}
+
+fn detail_of(error: &AppError) -> String {
+    error.detail.clone().unwrap_or_default()
 }
 
 /// Remove SMAPI from the game directory, restoring the original launcher on Linux.
@@ -225,7 +247,8 @@ fn apply(
     bundled_mods: &[String],
     unix: bool,
     user_config: Option<Vec<u8>>,
-) -> Result<bool, AppError> {
+    launcher_touched: &mut bool,
+) -> Result<(), AppError> {
     // Start from a clean slate so upgrades never leave files from an older SMAPI behind.
     for name in MANAGED_FILES {
         remove_path(&game_dir.join(name))?;
@@ -241,12 +264,12 @@ fn apply(
         copy_entry(&source, &dest)?;
     }
 
-    let launcher_replaced = if unix {
+    if unix {
+        // Flagged before the replacement starts, so a failure half-way through still makes
+        // the caller restore the original launcher.
+        *launcher_touched = true;
         replace_launcher(game_dir)?;
-        true
-    } else {
-        false
-    };
+    }
 
     // SMAPI resolves native libraries through a copy of the game's own deps file.
     fs::copy(game_dir.join(DEPS_JSON), game_dir.join(SMAPI_DEPS_JSON))
@@ -268,7 +291,7 @@ fn apply(
         remove_path(&dest)?;
         copy_entry(&bundle_dir.join(MODS).join(name), &dest)?;
     }
-    Ok(launcher_replaced)
+    Ok(())
 }
 
 /// Point the game launcher at SMAPI, keeping the original as `StardewValley-original`.
@@ -300,6 +323,29 @@ fn replace_launcher(game_dir: &Path) -> Result<(), AppError> {
                 fs::set_permissions(path, fs::Permissions::from_mode(0o755))
                     .map_err(|e| AppError::with_detail("smapiInstallFailed", e))?;
             }
+        }
+    }
+    Ok(())
+}
+
+/// Undo a launcher replacement that may have been interrupted anywhere.
+///
+/// `had_original` says whether `StardewValley-original` already existed before this
+/// install, i.e. SMAPI was already installed and the launcher already pointed at it.
+fn rollback_launcher(game_dir: &Path, had_original: bool) -> Result<(), AppError> {
+    let launcher = game_dir.join(LAUNCHER);
+    if !had_original {
+        restore_launcher(game_dir)?;
+        return Ok(());
+    }
+    // A reinstall: the previous launcher was SMAPI's script. If the replacement did not
+    // get as far as moving it into place, put the script there instead of leaving no
+    // launcher at all.
+    if !launcher.exists() {
+        let script = game_dir.join(LAUNCHER_SCRIPT);
+        if script.is_file() {
+            fs::rename(&script, &launcher)
+                .map_err(|e| AppError::with_detail("smapiInstallFailed", e))?;
         }
     }
     Ok(())
@@ -438,50 +484,78 @@ fn remove_path(path: &Path) -> Result<bool, AppError> {
     }
 }
 
-/// Snapshot of the paths an install may overwrite, used to roll back a failed attempt.
+/// The paths an install may overwrite, moved aside so a failed attempt can be undone.
+///
+/// Targets are *renamed* into a scratch folder inside the game directory: that is a cheap
+/// metadata operation even for a large `Mods/SMAPI.SaveBackup`, and staying on the same
+/// filesystem is what makes the rename atomic. A copy-based snapshot doubled the size of
+/// the largest targets and could fail on a nearly full disk before the install even ran.
 struct Backup {
-    dir: tempfile::TempDir,
+    dir: PathBuf,
     entries: Vec<(PathBuf, BackupKind)>,
 }
 
 enum BackupKind {
     Missing,
-    File,
-    Dir,
+    Moved,
 }
 
 impl Backup {
-    fn create(targets: &[PathBuf]) -> Result<Self, AppError> {
-        let dir =
-            tempfile::tempdir().map_err(|e| AppError::with_detail("smapiInstallFailed", e))?;
-        let mut entries = Vec::new();
+    fn create(game_dir: &Path, targets: &[PathBuf]) -> Result<Self, AppError> {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default();
+        let dir = game_dir.join(format!(".lingrid-install-{stamp}"));
+        fs::create_dir(&dir).map_err(|e| AppError::with_detail("smapiInstallFailed", e))?;
+        let mut backup = Self {
+            dir,
+            entries: Vec::new(),
+        };
         for (index, target) in targets.iter().enumerate() {
-            let stored = dir.path().join(index.to_string());
-            let kind = if target.is_dir() {
-                copy_entry(target, &stored)?;
-                BackupKind::Dir
-            } else if target.is_file() {
-                copy_entry(target, &stored)?;
-                BackupKind::File
-            } else {
-                BackupKind::Missing
-            };
-            entries.push((target.clone(), kind));
+            let stored = backup.dir.join(index.to_string());
+            match fs::symlink_metadata(target) {
+                Ok(_) => {
+                    if let Err(error) = fs::rename(target, &stored) {
+                        // Put back whatever was already moved before giving up.
+                        let _ = backup.rollback();
+                        return Err(AppError::with_detail("smapiInstallFailed", error));
+                    }
+                    backup.entries.push((target.clone(), BackupKind::Moved));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    backup.entries.push((target.clone(), BackupKind::Missing));
+                }
+                Err(error) => {
+                    let _ = backup.rollback();
+                    return Err(AppError::with_detail("smapiInstallFailed", error));
+                }
+            }
         }
-        Ok(Self { dir, entries })
+        Ok(backup)
     }
 
     fn restore(&self) -> Result<(), AppError> {
+        let failure = |e: std::io::Error| AppError::with_detail("smapiInstallFailed", e);
         for (index, (target, kind)) in self.entries.iter().enumerate() {
             remove_path(target)?;
-            let stored = self.dir.path().join(index.to_string());
-            match kind {
-                BackupKind::Missing => {}
-                BackupKind::File | BackupKind::Dir => copy_entry(&stored, target)?,
+            if matches!(kind, BackupKind::Moved) {
+                let stored = self.dir.join(index.to_string());
+                fs::rename(&stored, target).map_err(failure)?;
             }
         }
         Ok(())
     }
 
-    fn discard(self) {}
+    /// Restore every target, then remove the scratch directory. Used by the failure path:
+    /// leaving an empty `.lingrid-install-*` folder behind would confuse the next run.
+    fn rollback(self) -> Result<(), AppError> {
+        let result = self.restore();
+        let _ = fs::remove_dir_all(&self.dir);
+        result
+    }
+
+    fn discard(self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
 }

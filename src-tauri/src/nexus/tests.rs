@@ -1,4 +1,6 @@
 use super::graphql;
+use std::fs;
+use tempfile::TempDir;
 
 #[test]
 fn parses_search_results_and_builds_page_urls() {
@@ -100,6 +102,32 @@ fn parses_nxm_links_and_rejects_anything_else() {
 }
 
 #[test]
+fn download_keys_are_validated_before_they_reach_the_api() {
+    // The key is pasted into the request URL, so only the shape Nexus issues is accepted:
+    // anything else could append parameters to the download request.
+    for bad in [
+        "nxm://stardewvalley/mods/1/files/2?key=a%26expires%3D9&expires=1",
+        "nxm://stardewvalley/mods/1/files/2?key=abc",
+        "nxm://stardewvalley/mods/1/files/2?key=&expires=1",
+        "nxm://stardewvalley/mods/1/files/2?key=abc&expires=nope",
+        "nxm://stardewvalley/mods/0/files/1",
+    ] {
+        assert_eq!(
+            super::nxm::parse(bad).unwrap_err().code,
+            "nxmInvalid",
+            "{bad} must be rejected"
+        );
+    }
+
+    // Unknown query parameters are ignored, and a percent-encoded key is decoded first.
+    let link =
+        super::nxm::parse("nxm://stardewvalley/mods/1/files/2?key=ab%63&expires=1&user_id=7")
+            .unwrap();
+    assert_eq!(link.key.as_deref(), Some("abc"));
+    assert_eq!(link.expires, Some(1));
+}
+
+#[test]
 fn a_bare_number_is_treated_as_a_mod_id() {
     // Sharing a mod usually means sharing its id, so the search box accepts one.
     assert!(graphql::is_mod_id("5815"));
@@ -109,4 +137,43 @@ fn a_bare_number_is_treated_as_a_mod_id() {
     assert!(!graphql::is_mod_id("5815 extra"));
     assert!(!graphql::is_mod_id("mod-5815"));
     assert!(!graphql::is_mod_id(" 5815 "));
+}
+
+#[test]
+fn only_nexus_hosts_are_accepted_for_downloads() {
+    for host in [
+        "nexusmods.com",
+        "www.nexusmods.com",
+        "cf-files.nexusmods.com",
+        "files.nexus-cdn.com",
+    ] {
+        assert!(
+            super::nxm::is_allowed_host(host),
+            "{host} should be allowed"
+        );
+    }
+    for host in [
+        "evil-nexusmods.com",
+        "nexusmods.com.evil.example",
+        "example.com",
+        "",
+        "nexus-cdn.com.evil",
+    ] {
+        assert!(
+            !super::nxm::is_allowed_host(host),
+            "{host} must be rejected"
+        );
+    }
+}
+
+#[test]
+fn a_download_is_only_treated_as_a_zip_when_it_starts_like_one() {
+    let temp = TempDir::new().unwrap();
+    let zip = temp.path().join("archive.zip");
+    fs::write(&zip, b"PK\x03\x04rest").unwrap();
+    assert!(super::nxm::starts_like_zip(&zip).unwrap());
+
+    let text = temp.path().join("page.html");
+    fs::write(&text, b"<html>login</html>").unwrap();
+    assert!(!super::nxm::starts_like_zip(&text).unwrap());
 }

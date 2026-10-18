@@ -70,8 +70,16 @@ pub fn fetch_latest() -> Result<SmapiRelease, AppError> {
 }
 
 /// Path the release archive is cached at, whether or not anything is there yet.
+///
+/// The asset name comes from the API response, so only its last path component is used:
+/// a name carrying separators cannot place the cache file outside `cache_dir`.
 pub fn cached_path(cache_dir: &Path, release: &SmapiRelease) -> PathBuf {
-    cache_dir.join(&release.asset_name)
+    let name = Path::new(&release.asset_name)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty() && *name != "." && *name != "..")
+        .unwrap_or("smapi-installer.zip");
+    cache_dir.join(name)
 }
 
 /// Download the release archive into the cache.
@@ -86,7 +94,7 @@ pub fn download(
 ) -> Result<PathBuf, AppError> {
     fs::create_dir_all(cache_dir).map_err(|e| AppError::with_detail("smapiDownloadFailed", e))?;
     let target = cached_path(cache_dir, release);
-    let partial = cache_dir.join(format!("{}.partial", release.asset_name));
+    let partial = target.with_extension("partial");
     match stream(&release.asset_url, &partial, &mut on_progress) {
         Ok(()) => {
             fs::rename(&partial, &target)
@@ -100,11 +108,13 @@ pub fn download(
     }
 }
 
-/// Verify an archive against the SHA-256 published by GitHub. A release without a
-/// published digest is accepted (the API started reporting digests during 4.x).
+/// Verify an archive against the SHA-256 published by GitHub.
+///
+/// A missing digest is a failure, not a pass: the installer is executable code that the
+/// application copies into the game directory, so an unverifiable download is refused.
 pub fn verify(path: &Path, expected: Option<&str>) -> Result<(), AppError> {
     let Some(expected) = expected else {
-        return Ok(());
+        return Err(AppError::new("smapiDigestMissing"));
     };
     let actual = hash_file(path)?;
     if actual == expected {

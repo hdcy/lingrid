@@ -275,3 +275,64 @@ fn install_rejects_traversal_and_never_disables_what_it_installs() {
     assert_eq!(report.folders, ["Hidden"]);
     assert!(scan::scan(temp.path()).unwrap()[0].enabled);
 }
+
+#[test]
+fn refuses_manifests_that_smapi_would_reject() {
+    let temp = game();
+
+    // SMAPI requires Name, Author, Version and UniqueID; installing a mod without them
+    // would only break the next game launch.
+    let incomplete = archive(
+        &temp,
+        "Incomplete.zip",
+        &[(
+            "Incomplete/manifest.json",
+            br#"{"Name":"Incomplete","Author":"A"}"#,
+        )],
+    );
+    assert_eq!(
+        install::install(temp.path(), &incomplete).unwrap_err().code,
+        "modManifestInvalid"
+    );
+    assert!(!temp.path().join("Mods/Incomplete").exists());
+
+    let not_json = archive(
+        &temp,
+        "NotJson.zip",
+        &[("NotJson/manifest.json", b"not json at all")],
+    );
+    assert_eq!(
+        install::install(temp.path(), &not_json).unwrap_err().code,
+        "modManifestInvalid"
+    );
+}
+
+#[test]
+fn refuses_a_second_copy_of_an_installed_mod() {
+    let temp = game();
+    install::install(
+        temp.path(),
+        &archive(&temp, "Alpha-1.zip", &[("Alpha/manifest.json", ALPHA)]),
+    )
+    .unwrap();
+
+    // The same UniqueID under a different folder name makes SMAPI drop the mod entirely,
+    // so the copy is rejected instead of being written.
+    let copy = archive(&temp, "Alpha-2.zip", &[("Alpha Copy/manifest.json", ALPHA)]);
+    let error = install::install(temp.path(), &copy).unwrap_err();
+    assert_eq!(error.code, "modDuplicate");
+    assert_eq!(error.detail.as_deref(), Some("A.Alpha"));
+    assert!(!temp.path().join("Mods/Alpha Copy").exists());
+
+    // Two copies inside one archive are the same problem.
+    let doubled = archive(
+        &temp,
+        "Double.zip",
+        &[("One/manifest.json", BETA), ("Two/manifest.json", BETA)],
+    );
+    assert_eq!(
+        install::install(temp.path(), &doubled).unwrap_err().code,
+        "modDuplicate"
+    );
+    assert!(!temp.path().join("Mods/Two").exists());
+}

@@ -137,7 +137,11 @@
       "nxmNeedsFile": "该链接指向的是 Mod 而不是文件。请打开该 Mod 的 Files 标签页，对具体文件的「Mod Manager Download」右键复制链接地址，再粘贴到这里。",
       "nxmUnsupportedGame": "该链接属于其他游戏。",
       "nexusNeedsGame": "收到了 Mod 链接，但还没有选择游戏目录。请先在游戏目录页面选择一个，再点一次该链接。",
-      "unexpected": "操作未完成，请重试并查看技术详情。"
+      "unexpected": "操作未完成，请重试并查看技术详情。",
+      "smapiDigestMissing": "SMAPI 发行版没有公布校验值，无法验证下载内容，已停止安装。",
+      "modManifestInvalid": "压缩包中的 Mod 清单文件（manifest.json）缺失或格式不完整，未执行安装。",
+      "modDuplicate": "已安装相同 UniqueID 的 Mod，请先删除旧版本。",
+      "downloadTooLarge": "下载内容过大，无法安全安装。请从网站手动下载后再安装压缩包。"
     },
     "nexus": {
       "nxmTitle": "从链接安装",

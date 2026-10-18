@@ -31,11 +31,24 @@ fn key(game_dir: &Path) -> String {
 }
 
 fn load(path: &Path) -> RecordFile {
-    // A missing or damaged file falls back to an empty record rather than blocking installs.
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+    // A missing file simply means nothing has been installed yet.
+    let Ok(text) = fs::read_to_string(path) else {
+        return RecordFile::default();
+    };
+    match serde_json::from_str(&text) {
+        Ok(records) => records,
+        Err(_) => {
+            // Keep the damaged file instead of overwriting it: it still lists the paths an
+            // earlier install created, which an uninstall would otherwise leave behind.
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|elapsed| elapsed.as_nanos())
+                .unwrap_or_default();
+            let aside = path.with_extension(format!("json.corrupt-{stamp}"));
+            let _ = fs::rename(path, aside);
+            RecordFile::default()
+        }
+    }
 }
 
 fn store(path: &Path, records: &RecordFile) -> Result<(), AppError> {

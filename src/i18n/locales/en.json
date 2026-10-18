@@ -137,7 +137,11 @@
       "nxmNeedsFile": "That link points at a mod, not a file. Open the mod's Files tab and use the Mod Manager Download link of a specific file (right-click it and copy the address).",
       "nxmUnsupportedGame": "That link belongs to a different game.",
       "nexusNeedsGame": "A mod link arrived, but no game directory is selected yet. Pick one on the Game directory page, then click the link again.",
-      "unexpected": "The operation could not be completed. Retry or inspect the technical details."
+      "unexpected": "The operation could not be completed. Retry or inspect the technical details.",
+      "smapiDigestMissing": "The SMAPI release has no published checksum, so the download cannot be verified. Installation was stopped.",
+      "modManifestInvalid": "A mod in the archive has a missing or unreadable manifest.json. Nothing was installed.",
+      "modDuplicate": "A mod with the same UniqueID is already installed. Remove the older version first.",
+      "downloadTooLarge": "The download is too large to install safely. Download it from the website and install the archive by hand."
     },
     "nexus": {
       "nxmTitle": "Install from link",

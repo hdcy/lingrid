@@ -1,6 +1,8 @@
-use super::model::InstalledModsReport;
+use super::{model::InstalledModsReport, scan};
 use crate::error::AppError;
+use serde_json::Value;
 use std::{
+    collections::BTreeSet,
     fs,
     io::Read,
     path::{Path, PathBuf},
@@ -11,6 +13,10 @@ use zip::ZipArchive;
 ///
 /// An archive usually holds one mod, but packs with several mods exist, and the content
 /// is often wrapped in an extra directory. Each mod is located by its `manifest.json`.
+///
+/// Every manifest is validated and checked against the mods already installed before any
+/// file is written: SMAPI refuses to load a mod with a broken manifest, and it aborts the
+/// whole load when two folders declare the same `UniqueID`.
 pub fn install(game_dir: &Path, archive: &Path) -> Result<InstalledModsReport, AppError> {
     let mods_dir = game_dir.join("Mods");
     fs::create_dir_all(&mods_dir).map_err(|e| AppError::with_detail("modsUnreadable", e))?;
@@ -23,14 +29,26 @@ pub fn install(game_dir: &Path, archive: &Path) -> Result<InstalledModsReport, A
         return Err(AppError::new("modArchiveInvalid"));
     }
 
-    // Nothing is written until every target name has been checked, so a half-install
-    // cannot happen because the third of five mods collided.
+    // Nothing is written until every target has been checked, so a half-install cannot
+    // happen because the third of five mods collided.
+    let installed: BTreeSet<String> = scan::scan(game_dir)?
+        .into_iter()
+        .filter_map(|installed| installed.unique_id)
+        .map(|id| id.to_lowercase())
+        .collect();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut planned = Vec::new();
     for root in roots {
+        let unique_id = manifest_unique_id(&root)?;
         let folder = folder_name(&root, workspace.path(), archive)?;
         let dest = mods_dir.join(&folder);
+        // A same-named folder is the more actionable problem ("remove the old version").
         if dest.exists() {
             return Err(AppError::with_detail("modFolderTaken", folder));
+        }
+        let key = unique_id.to_lowercase();
+        if installed.contains(&key) || !seen.insert(key) {
+            return Err(AppError::with_detail("modDuplicate", unique_id));
         }
         planned.push((root, folder, dest));
     }
@@ -40,6 +58,54 @@ pub fn install(game_dir: &Path, archive: &Path) -> Result<InstalledModsReport, A
         folders.push(folder);
     }
     Ok(InstalledModsReport { folders })
+}
+
+/// Read a mod's `manifest.json` and check the fields SMAPI requires.
+///
+/// Field names are matched case-insensitively because manifests in the wild spell them
+/// inconsistently; `Version` may be a string or an object.
+fn manifest_unique_id(root: &Path) -> Result<String, AppError> {
+    let path = root.join("manifest.json");
+    let text =
+        fs::read_to_string(&path).map_err(|e| AppError::with_detail("modManifestInvalid", e))?;
+    let value: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|e| AppError::with_detail("modManifestInvalid", e))?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| AppError::with_detail("modManifestInvalid", path.display()))?;
+    for field in ["Name", "Author", "UniqueID"] {
+        let present = object
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(field))
+            .and_then(|(_, value)| value.as_str())
+            .is_some_and(|value| !value.trim().is_empty());
+        if !present {
+            return Err(AppError::with_detail(
+                "modManifestInvalid",
+                format!("{} has no {field}", path.display()),
+            ));
+        }
+    }
+    let version = object
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("Version"))
+        .map(|(_, value)| value);
+    match version {
+        Some(Value::String(text)) if !text.trim().is_empty() => {}
+        Some(Value::Object(_)) => {}
+        _ => {
+            return Err(AppError::with_detail(
+                "modManifestInvalid",
+                format!("{} has no Version", path.display()),
+            ));
+        }
+    }
+    object
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("UniqueID"))
+        .and_then(|(_, value)| value.as_str())
+        .map(|id| id.trim().to_owned())
+        .ok_or_else(|| AppError::with_detail("modManifestInvalid", path.display()))
 }
 
 /// Copy a folder tree out of the temporary extraction into `Mods`.
