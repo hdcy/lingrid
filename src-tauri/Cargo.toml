@@ -1,6 +1,6 @@
 [package]
 name = "lingrid"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lingrid — Stardew Valley mod manager"
 authors = ["hdcy"]
 edition = "2021"

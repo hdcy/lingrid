@@ -10,8 +10,25 @@ mod smapi;
 /// Event the frontend listens on when the system hands us an `nxm://` link.
 const NXM_EVENT: &str = "nxm://received";
 
+/// Work around WebKitGTK's DMA-BUF renderer on NVIDIA.
+///
+/// With the NVIDIA driver the renderer routinely fails to allocate GBM buffers, and the
+/// window comes up uniformly grey even though the page has loaded. Falling back to the
+/// non-DMA-BUF path costs almost nothing for a 2D interface and keeps the UI visible.
+/// An explicit value from the environment always wins, so a working setup can opt back in.
+#[cfg(target_os = "linux")]
+fn apply_linux_graphics_fallbacks() {
+    let nvidia = std::path::Path::new("/proc/driver/nvidia/version").is_file();
+    if nvidia && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    apply_linux_graphics_fallbacks();
+
     tauri::Builder::default()
         // Registered first on purpose: a second launch (which is what a browser does when
         // the user clicks "Mod Manager Download") hands its arguments to the running
