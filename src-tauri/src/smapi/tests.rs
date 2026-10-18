@@ -111,7 +111,11 @@ fn linux_install_replaces_launcher_and_derives_deps_json() {
 
     assert_eq!(outcome.version, "4.5.2");
     assert!(outcome.launcher_replaced);
-    assert_eq!(outcome.executable, game.join("StardewModdingAPI"));
+    // `install` canonicalizes the directory; on Windows that adds a `\\?\` prefix.
+    assert_eq!(
+        outcome.executable,
+        fs::canonicalize(game.join("StardewModdingAPI")).unwrap()
+    );
     assert_eq!(
         read(&game.join("StardewValley-original")),
         ORIGINAL_LAUNCHER
@@ -154,7 +158,7 @@ fn windows_install_keeps_the_game_launcher() {
     assert!(!report.outcome.launcher_replaced);
     assert_eq!(
         report.outcome.executable,
-        game.join("StardewModdingAPI.exe")
+        fs::canonicalize(game.join("StardewModdingAPI.exe")).unwrap()
     );
     assert_eq!(read(&game.join("Stardew Valley.exe")), "game");
     assert_eq!(read(&game.join("StardewModdingAPI.deps.json")), DEPS);
@@ -508,11 +512,12 @@ fn records_written_before_created_paths_existed_still_load() {
         .unwrap()
         .to_string_lossy()
         .into_owned();
-    fs::write(
-        &record,
-        format!(r#"{{"version":1,"games":{{"{key}":{{"smapi_version":"4.5.0"}}}}}}"#),
-    )
-    .unwrap();
+    // Build the JSON through serde: a hand-written Windows path contains backslashes that
+    // would produce invalid JSON escapes.
+    let mut games = serde_json::Map::new();
+    games.insert(key, serde_json::json!({ "smapi_version": "4.5.0" }));
+    let body = serde_json::json!({ "version": 1, "games": games });
+    fs::write(&record, serde_json::to_string(&body).unwrap()).unwrap();
 
     assert_eq!(
         records::version_of(&record, &game).as_deref(),
