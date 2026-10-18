@@ -39,6 +39,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Utility",
+    "shortDescription": "Stardew Valley mod manager",
+    "longDescription": "Manage Stardew Valley mods, install and update SMAPI, and install mods straight from Nexus Mods links."
   }
 }

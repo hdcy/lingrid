@@ -23,6 +23,14 @@ npm run tauri dev
 
 `npm run dev` 仅打开前端开发服务；本机目录访问需要 Tauri 桌面应用。
 
+### 打包 AppImage
+
+```sh
+NO_STRIP=1 npm run tauri build -- --bundles appimage
+```
+
+产物在 `src-tauri/target/release/bundle/appimage/`。Arch 等使用新版 binutils 的发行版需要 `NO_STRIP=1`：Tauri 调用的 linuxdeploy 自带旧版 `strip`，不认识 `.relr.dyn` 段，会在打包阶段中止（应用本身已经编译成功）。
+
 ## 检查
 
 ```sh
