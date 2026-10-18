@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lingrid</title>
+    <script>
+      // Applied before the first paint so a dark theme does not flash white. The same
+      // values are re-applied from src/shared/theme.ts once the app starts.
+      (function () {
+        try {
+          var accents = ['forest', 'ocean', 'violet', 'amber'];
+          var mode = localStorage.getItem('lingrid.themeMode.v1') || 'system';
+          var accent = localStorage.getItem('lingrid.themeAccent.v1');
+          var dark = mode === 'dark'
+            || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+          document.documentElement.dataset.accent = accents.indexOf(accent) >= 0 ? accent : 'forest';
+        } catch (error) {
+          // Preferences unavailable; the app applies its defaults when it starts.
+        }
+      })();
+    </script>
+  </head>
+
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

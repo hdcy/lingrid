@@ -1,0 +1,212 @@
+/* Palette -------------------------------------------------------------------
+   Every colour in the app comes from here, so switching theme or accent is a
+   change of two attributes on <html> instead of touching component styles. */
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-app: #fafbf9;
+  --bg-panel: #ffffff;
+  --bg-sidebar: #f0f3ed;
+  --bg-header: #ffffff;
+  --bg-statusbar: #f6f8f3;
+  --bg-input: #ffffff;
+  --bg-subtle: #edf1e8;
+  --bg-hover: #e5ebe0;
+  --text: #26382e;
+  --text-muted: #677469;
+  --border: #e0e5dc;
+  --border-strong: #ccd5cc;
+  --warning: #b99145;
+  --danger-bg: #fff0eb;
+  --danger-border: #efc4b5;
+  --danger-text: #893e2c;
+  --success-bg: #eaf2e5;
+  --success-border: #c3d5ba;
+  --notice-bg: #fff5df;
+  --notice-border: #ecd5a5;
+  --focus: #76a782;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-app: #14181a;
+  --bg-panel: #1c2224;
+  --bg-sidebar: #181d1f;
+  --bg-header: #1c2224;
+  --bg-statusbar: #181d1f;
+  --bg-input: #222a2c;
+  --bg-subtle: #262e30;
+  --bg-hover: #293234;
+  --text: #dde5e0;
+  --text-muted: #94a29a;
+  --border: #2c3538;
+  --border-strong: #3d4a4d;
+  --warning: #d9a95c;
+  --danger-bg: #3a2521;
+  --danger-border: #5d3a31;
+  --danger-text: #f0b4a2;
+  --success-bg: #23312a;
+  --success-border: #3b5344;
+  --notice-bg: #33291a;
+  --notice-border: #57452a;
+  --focus: #6f9d80;
+}
+
+/* Accents -------------------------------------------------------------------
+   Each accent carries its own values per mode: the light tint is too weak on a
+   dark background, so dark mode gets a lighter accent and deeper soft colours. */
+
+:root[data-accent='forest'] {
+  --accent: #315d43;
+  --accent-hover: #254b35;
+  --accent-contrast: #ffffff;
+  --accent-text: #2d5236;
+  --accent-soft: #dde8d6;
+  --accent-soft-border: #d1dec9;
+  --accent-tint: #edf3e9;
+}
+
+:root[data-accent='ocean'] {
+  --accent: #1f5d7a;
+  --accent-hover: #17495f;
+  --accent-contrast: #ffffff;
+  --accent-text: #23576f;
+  --accent-soft: #d9e8f0;
+  --accent-soft-border: #c6dbe6;
+  --accent-tint: #eaf2f7;
+}
+
+:root[data-accent='violet'] {
+  --accent: #5b3f8f;
+  --accent-hover: #48327a;
+  --accent-contrast: #ffffff;
+  --accent-text: #523a80;
+  --accent-soft: #e5ddf2;
+  --accent-soft-border: #d6cbe9;
+  --accent-tint: #f1ecf9;
+}
+
+:root[data-accent='amber'] {
+  --accent: #96601a;
+  --accent-hover: #7d4f12;
+  --accent-contrast: #ffffff;
+  --accent-text: #85561b;
+  --accent-soft: #f5e6cd;
+  --accent-soft-border: #e8d3b0;
+  --accent-tint: #faf1e2;
+}
+
+:root[data-theme='dark'][data-accent='forest'] {
+  --accent: #6aa27f;
+  --accent-hover: #7db491;
+  --accent-contrast: #10261a;
+  --accent-text: #a8d0b6;
+  --accent-soft: #24382c;
+  --accent-soft-border: #34523f;
+  --accent-tint: #1f2a24;
+}
+
+:root[data-theme='dark'][data-accent='ocean'] {
+  --accent: #67a8c8;
+  --accent-hover: #7fb8d4;
+  --accent-contrast: #08222e;
+  --accent-text: #a5cde2;
+  --accent-soft: #1e3242;
+  --accent-soft-border: #2d4a5e;
+  --accent-tint: #16232b;
+}
+
+:root[data-theme='dark'][data-accent='violet'] {
+  --accent: #a48ad6;
+  --accent-hover: #b49ce2;
+  --accent-contrast: #1a1030;
+  --accent-text: #c9b6ea;
+  --accent-soft: #2e2544;
+  --accent-soft-border: #453a63;
+  --accent-tint: #201a2e;
+}
+
+:root[data-theme='dark'][data-accent='amber'] {
+  --accent: #d3a057;
+  --accent-hover: #ddb073;
+  --accent-contrast: #2a1c08;
+  --accent-text: #e7c186;
+  --accent-soft: #3a2d18;
+  --accent-soft-border: #57431f;
+  --accent-tint: #2a2114;
+}
+
+/* Base ---------------------------------------------------------------------- */
+
+:root {
+  font-family: Inter, 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans CJK JP', system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg-app);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+  font-weight: 400;
+}
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body { margin: 0; min-width: 320px; overflow: hidden; font-size: 14px; }
+button, input, select { font: inherit; }
+button, select { cursor: pointer; }
+button, select, input { border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg-input); color: inherit; padding: 7px 12px; }
+button { font-size: 13px; font-weight: 550; }
+button:hover:not(:disabled) { background: var(--accent-tint); border-color: var(--accent); }
+button:disabled { opacity: .55; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.page { min-width: 0; }
+.page-heading { margin-block: 0 24px; }
+.eyebrow { color: var(--accent-text); font-size: 12px; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px; }
+h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -.5px; }
+h2 { font-size: 14px; font-weight: 650; margin-block: 24px 12px; }
+p { margin-block: 8px; }
+.muted { color: var(--text-muted); }
+.small { font-size: 13px; }
+.panel { background: var(--bg-panel); border: 1px solid var(--border); padding: 20px; border-radius: 8px; margin-bottom: 16px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+form { margin-top: 20px; }
+form label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; }
+.path-form { display: flex; gap: 10px; }
+.path-form input { min-width: 0; flex: 1; font-family: ui-monospace, monospace; font-size: 13px; }
+.path-form button { flex-shrink: 0; }
+.notice { padding: 15px 19px; background: var(--notice-bg); border: 1px solid var(--notice-border); border-radius: 12px; margin-block: 16px; overflow-wrap: anywhere; }
+.notice.error { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+.notice.success { background: var(--success-bg); border-color: var(--success-border); }
+.installation.active { border-color: var(--accent-soft-border); box-shadow: inset 3px 0 var(--accent); }
+.badges { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+.badge { background: var(--bg-subtle); color: var(--accent-text); border-radius: 6px; font-size: 12px; padding: 2px 8px; }
+.game-path { font-family: ui-monospace, monospace; overflow-wrap: anywhere; font-size: 14px; margin-block: 14px; text-align: start; }
+.installation-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.empty { padding: 16px 24px; text-align: center; }
+summary { cursor: pointer; font-size: 13px; }
+pre, code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.warning-list li { margin-block: 15px; }
+.section-title { margin-block: 0 16px; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid var(--border); padding-top: 18px; }
+.setting-row label { font-weight: 550; }
+.setting-row select { min-width: 140px; max-width: 100%; }
+.overview-game { display: flex; align-items: center; gap: 18px; }
+.game-cover { width: 68px; height: 76px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); color: var(--accent); border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; }
+.game-cover svg { width: 36px; height: 36px; }
+.overview-game-info { flex: 1; min-width: 0; }
+.overview-game-info h2 { font-size: 18px; margin: 0; }
+.overview-game-info .eyebrow { margin-top: 0; }
+.overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.stat-value { font-size: 30px; line-height: 1.2; color: var(--accent); }
+.button-link { display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--border-strong); padding: 7px 12px; border-radius: 6px; font-size: 13px; color: var(--accent); text-decoration: none; background: var(--bg-panel); }
+.button-link:hover { background: var(--accent-tint); }
+.button-link svg { width: 16px; height: 16px; }
+@media (max-width: 560px) {
+  .path-form { flex-direction: column; }
+  .panel { padding: 16px; }
+  .setting-row { align-items: stretch; flex-direction: column; gap: 10px; }
+  .overview-grid { grid-template-columns: 1fr; gap: 0; }
+  .overview-game { flex-wrap: wrap; }
+}
