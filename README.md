@@ -36,7 +36,7 @@ NO_STRIP=1 npm run tauri build -- --bundles appimage
 WebKitGTK 的 DMA-BUF 渲染器在 NVIDIA 驱动上经常分配缓冲区失败，页面已经加载但窗口只剩一块灰色。应用检测到 `/proc/driver/nvidia/version` 时会自动设置 `WEBKIT_DISABLE_DMABUF_RENDERER=1`；如果你自己设置过这个变量，应用不会覆盖。仍然异常时可以再叠加：
 
 ```sh
-WEBKIT_DISABLE_COMPOSITING_MODE=1 ./lingrid_0.1.1_amd64.AppImage
+WEBKIT_DISABLE_COMPOSITING_MODE=1 ./lingrid_0.1.0_amd64.AppImage
 ```
 
 ## 检查
